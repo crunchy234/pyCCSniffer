@@ -75,7 +75,7 @@ class FrameType(object):
         if masked_value is FrameType.LLDN:
             return FrameType.LLDN
         if masked_value is FrameType.MULTIPURPOSE:
-            FrameType.MULTIPURPOSE
+            return FrameType.MULTIPURPOSE
 
         return FrameType.UNKNOWN
 
@@ -158,16 +158,17 @@ class FCF(object):
 
 
 class SFS(object):
-    def __init__(self, beacon_order, superframe_order, final_cap_slot, ble, is_pan_coordinator, is_association_permitted):
+    def __init__(self, beacon_order, super_frame_order, final_cap_slot, ble, is_pan_coordinator,
+                 is_association_permitted):
         self.beaconOrder = beacon_order
-        self.superframeOrder = superframe_order
+        self.superFrameOrder = super_frame_order
         self.finalCAPSlot = final_cap_slot
         self.ble = ble
         self.isPANCoordinator = is_pan_coordinator
         self.isAssociationPermitted = is_association_permitted
 
     def __repr__(self, *args, **kwargs):
-        return "SFS[BO[{}] SO[{}]]".format(self.beaconOrder, self.superframeOrder)
+        return "SFS[BO[{}] SO[{}]]".format(self.beaconOrder, self.superFrameOrder)
 
     @staticmethod
     def parse(sfs):
@@ -227,7 +228,9 @@ class AddressingFields(object):
 
         if fcf.destAddressingMode is AddressingMode.NONE:
             destination_address = None
+            dest_pan_id = None
         else:
+            destination_address = None
             (dest_pan_id,) = struct.unpack_from("<H", byte_stream_at_addresses, length)
             length += 2
 
@@ -246,7 +249,9 @@ class AddressingFields(object):
 
         if fcf.sourceAddressingMode is AddressingMode.NONE:
             source_address = None
+            src_pan_id = None
         else:
+            source_address = None
             if False is fcf.panIdCompression:
                 (src_pan_id,) = struct.unpack_from("<H", byte_stream_at_addresses, length)
                 length += 2
@@ -283,11 +288,8 @@ class IEEE15dot4Frame(object):
         self.msdu = msdu
 
     def __repr__(self, *args, **kwargs):
-        output = []
-        output.append("{} -".format(FrameType.to_string(self.fcf.frametype)))
-        output.append("Time[{}]".format(self.time))
-        output.append("{}".format(self.addressing))
-        output.append("MSDU[{}]".format(binascii.hexlify(self.msdu)))
+        output = ["{} -".format(FrameType.to_string(self.fcf.frametype)), "Time[{}]".format(self.time),
+                  "{}".format(self.addressing), "MSDU[{}]".format(binascii.hexlify(self.msdu))]
 
         return " ".join(output)
 
@@ -297,9 +299,7 @@ class IEEE15dot4AckFrame(IEEE15dot4Frame):
         super(IEEE15dot4AckFrame, self).__init__(*args, **kwargs)
 
     def __repr__(self, *args, **kwargs):
-        output = []
-        output.append("{} -".format(FrameType.to_string(self.fcf.frametype)))
-        output.append("SeqNum[{}]".format(self.sequenceNumber))
+        output = ["{} -".format(FrameType.to_string(self.fcf.frametype)), "SeqNum[{}]".format(self.sequenceNumber)]
 
         return " ".join(output)
 
@@ -314,11 +314,8 @@ class IEEE15dot4BeaconFrame(IEEE15dot4Frame):
         self.beaconPayload = beacon_payload
 
     def __repr__(self, *args, **kwargs):
-        output = []
-        output.append("{} -".format(FrameType.to_string(self.fcf.frametype)))
-        output.append("Time[{}]".format(self.time))
-        output.append("{}".format(self.sfs))
-        output.append("{}".format(self.addressing))
+        output = ["{} -".format(FrameType.to_string(self.fcf.frametype)), "Time[{}]".format(self.time),
+                  "{}".format(self.sfs), "{}".format(self.addressing)]
 
         if len(self.pendingShortAddresses) > 0:
             addresses = ["{:x}".format(addr) for addr in self.pendingShortAddresses]
@@ -356,7 +353,7 @@ class IEEE15dot4CommandFrame(IEEE15dot4Frame):
         # noinspection PyUnresolvedReferences
         if self.commandId is CommandFrameType.AssociationRequest:
             fmt = "<B"
-            (capabilityInfo,) = check_and_unpack(fmt, payload, 0, (0))
+            (capabilityInfo,) = check_and_unpack(fmt, payload, 0, 0)
 
             self.additionalInfo["allocateAddress"] = bool(0x01 & (capabilityInfo >> 7))
             self.additionalInfo["securityCapable"] = bool(0x01 & (capabilityInfo >> 6))
@@ -395,13 +392,9 @@ class IEEE15dot4CommandFrame(IEEE15dot4Frame):
             self.additionalInfo["shortAddress"] = shortAddress
 
     def __repr__(self, *args, **kwargs):
-        output = []
-        output.append("{} -".format(FrameType.to_string(self.fcf.frametype)))
-        output.append("Time[{}]".format(self.time))
-        output.append("SeqNum[{}]".format(self.sequenceNumber))
-        output.append("{}".format(self.addressing))
-        output.append("Command[{}]".format(self.command))
-        output.append("AdditionalInfo[{}]".format(self.additionalInfo))
+        output = ["{} -".format(FrameType.to_string(self.fcf.frametype)), "Time[{}]".format(self.time),
+                  "SeqNum[{}]".format(self.sequenceNumber), "{}".format(self.addressing),
+                  "Command[{}]".format(self.command), "AdditionalInfo[{}]".format(self.additionalInfo)]
 
         return " ".join(output)
 
@@ -430,12 +423,13 @@ class IEEE15dot4FrameFactory(object):
 
         return frame
 
+    # noinspection PyUnusedLocal
     @staticmethod
     def __parse_beacon(frame, **kwargs):
         byte_stream = frame.msdu
         offset = 0
         fmt = "<HB"
-        (superframeSpecification, gts) = check_and_unpack(fmt, byte_stream, offset, (0, 0))
+        (super_frameSpecification, gts) = check_and_unpack(fmt, byte_stream, offset, (0, 0))
         offset += struct.calcsize(fmt)
 
         fmt = "<B"
@@ -460,13 +454,14 @@ class IEEE15dot4FrameFactory(object):
             offset += struct.calcsize(fmt)
             pending_ext_addresses.append(nextExtAddress)
 
-        return IEEE15dot4BeaconFrame(SFS.parse(superframeSpecification),
+        return IEEE15dot4BeaconFrame(SFS.parse(super_frameSpecification),
                                      gts,
                                      pending_short_addresses,
                                      pending_ext_addresses,
                                      byte_stream[offset:],
                                      **frame.__dict__)
 
+    # noinspection PyUnusedLocal
     @staticmethod
     def __parse_mac_command(frame, **kwargs):
         byte_stream = frame.msdu

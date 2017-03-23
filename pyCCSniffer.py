@@ -28,22 +28,19 @@
 from __future__ import print_function
 
 import argparse
-import binascii
-from builtins import input
-from datetime import datetime
-import errno
 import inspect
 import logging.handlers
-import select
-import six
-from six import StringIO
 import struct
 import sys
 import threading
 import time
-import types
+from datetime import datetime
+
 import usb.core
 import usb.util
+# noinspection PyCompatibility
+from builtins import input
+from six import StringIO
 
 import ieee15dot4 as ieee
 
@@ -100,6 +97,7 @@ class CapturedFrame(object):
 
 
 class CustomAssertFrame(object):
+    # noinspection PyUnusedLocal
     def __init__(self, date, code, line, file, **kwargs):
         self.date = date
         self.code = code
@@ -218,9 +216,9 @@ class PacketHandler(object):
                 stats[ieee.FrameType.to_string(frame.fcf.frametype)] += 1
                 stats['Dissected'] += 1
 
-        except Exception as e:
-            logger.warn("Error dissecting frame.")
-            logger.warn("The error was: %s" % e.args)
+        except Exception as error:
+            logger.warning("Error dissecting frame.")
+            logger.warning("The error was: %s" % error.args)
             stats["Dissection errors"] += 1
 
     @staticmethod
@@ -285,13 +283,14 @@ class CC2531EMK:
 
         if self.callback is None:
             raise ValueError("A valid callback must be provided")
+        # noinspection PyDeprecation
         if len(inspect.getargspec(self.callback)[0]) < 2:
             raise ValueError("Callback must have at least 2 arguments")
 
         try:
             self.dev = usb.core.find(idVendor=0x0451, idProduct=0x16ae)
         except usb.core.USBError:
-            raise OSError("Permission denied, you need to add an udev rule for this device", errno=errno.EACCES)
+            raise OSError("Permission denied, you need to add an udev rule for this device")
 
         if self.dev is None:
             raise IOError("Device not found")
@@ -307,7 +306,8 @@ class CC2531EMK:
         while True:
             # check if powered up
             power_status = self.dev.ctrl_transfer(CC2531EMK.DIR_IN, CC2531EMK.GET_POWER, 0, 0, 1)
-            if power_status[0] == 4: break
+            if power_status[0] == 4:
+                break
             time.sleep(0.1)
 
         self.set_channel(channel)
@@ -338,34 +338,26 @@ class CC2531EMK:
 
         # While the running flag is set, continue to read from the USB device
         while self.running:
-            bytesteam = self.dev.read(CC2531EMK.DATA_EP, 4096, timeout=CC2531EMK.DATA_TIMEOUT)
-            #             print("RECV>> %s" % binascii.hexlify(bytesteam))
+            byte_steam = self.dev.read(CC2531EMK.DATA_EP, 4096, timeout=CC2531EMK.DATA_TIMEOUT)
+            #             print("RECV>> %s" % binascii.hexlify(byte_steam))
 
-            if len(bytesteam) >= 3:
-                (ieee_cmd, cmdLen) = struct.unpack_from("<BH", bytesteam)
-                bytesteam = bytesteam[3:]
-                if len(bytesteam) == cmdLen:
+            if len(byte_steam) >= 3:
+                (ieee_cmd, cmdLen) = struct.unpack_from("<BH", byte_steam)
+                byte_steam = byte_steam[3:]
+                if len(byte_steam) == cmdLen:
                     # buffer contains the correct number of bytes
                     if CC2531EMK.COMMAND_FRAME == ieee_cmd:
                         logger.info('Read a frame of size %d' % (cmdLen,))
                         stats['Captured'] += 1
-                        (timestamp, pktLen) = struct.unpack_from("<IB", bytesteam)
-                        frame = bytesteam[5:]
+                        (timestamp, pktLen) = struct.unpack_from("<IB", byte_steam)
+                        frame = byte_steam[5:]
 
                         if len(frame) == pktLen:
                             self.callback(timestamp, frame)
                         else:
-                            logger.warn("Received a frame with incorrect length, pkgLen:%d, len(frame):%d" % (
+                            logger.warning("Received a frame with incorrect length, pkgLen:%d, len(frame):%d" % (
                                 pktLen, len(frame)))
                             stats['Non-Frame'] += 1
-
-                            #                     elif cmd == CC2531EMK.COMMAND_CHANNEL:
-                            #                         logger.info('Received a command response: [%02x %02x]' % (cmd, bytesteam[0]))
-                            #                         # We'll only ever see this if the user asked for it, so we are
-                            #                         # running interactive. Print away
-                            #                         print('Sniffing in channel: %d' % (bytesteam[0],))
-                            #                     else:
-                            #                         logger.warn("Received a command response with unknown code - CMD:%02x byte:%02x]" % (cmd, bytesteam[0]))
 
     def set_channel(self, channel):
         was_running = self.running
@@ -496,6 +488,8 @@ if __name__ == '__main__':
     if args.annotation is not None:
         packetHandler.set_annotation(args.annotation)
 
+    h = None
+    e = None
     if args.rude is False:
         h = StringIO()
         h.write('Commands:\n')
